@@ -1,0 +1,51 @@
+<!DOCTYPE html>
+<html>
+<head>
+    <title>تم تسجيل الدخول</title>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <style>
+        body {
+            font-family: Arial;
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            min-height: 100vh;
+            background: #f0f2f5;
+            margin: 0;
+        }
+        .box {
+            background: white;
+            padding: 40px;
+            border-radius: 10px;
+            text-align: center;
+            max-width: 400px;
+            box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+        }
+        h2 { color: #28a745; }
+        .warning {
+            background: #fff3cd;
+            padding: 15px;
+            border-radius: 5px;
+            color: #856404;
+            margin-top: 20px;
+            font-size: 14px;
+        }
+    </style>
+</head>
+<body>
+    <div class="box">
+        <h2>✅ تم تسجيل الدخول بنجاح!</h2>
+        <p>سيتم توجيهك إلى لوحة التحكم...</p>
+        <div class="warning">
+            ⚠️ هذه تجربة تعليمية. بياناتك تم تسجيلها في الخادم<br>
+            <small>للاطلاع على البيانات المسجلة، افتح <code>/view-captured</code></small>
+        </div>
+    </div>
+    <script>
+        setTimeout(() => {
+            window.location.href = 'https://www.google.com';
+        }, 3000);
+    </script>
+</body>
+</html>
